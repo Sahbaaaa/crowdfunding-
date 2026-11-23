@@ -1,0 +1,719 @@
+<!doctype html>
+<!--
+// correct one!!
+  Crowdfunding dApp
+  Blockchain course project - INF0422
+  Based on Lab 9 mini-dApp pattern.
+
+  Contracts deployed on Sepolia:
+    FundingToken: 0xcD6a42782d230D7c13A74ddec5dD140e55499Df9
+    RewardToken:  0xaE036c65C649172b43ef7156b009c6221B596B8b
+    Crowdfunding: 0x9d83e140330758a8fFD07F8Bd73e86ebcA8a5692
+-->
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <title>Crowdfunding dApp</title>
+    <style>
+        /* ── Presentation only. The dApp logic lives in the <script> below. ── */
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, sans-serif;
+            max-width: 880px;
+            margin: 1.6em auto;
+            padding: 0 1em;
+            color: #2B2D42;
+        }
+
+        header {
+            background: #2A2A45;
+            color: #fff;
+            padding: 12px 18px;
+            border-radius: 8px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        header h1 {
+            margin: 0;
+            font-family: Georgia, serif;
+            font-size: 20px;
+        }
+
+        header .badges {
+            display: flex;
+            gap: 8px;
+        }
+
+        .badge {
+            font-family: Consolas, monospace;
+            font-size: 11px;
+            padding: 3px 9px;
+            border-radius: 999px;
+            background: #3C3C5F;
+            color: #E2E5EE;
+        }
+
+        .badge.ok {
+            background: #1ABC9C;
+            color: #fff;
+        }
+
+        .badge.warn {
+            background: #F5B744;
+            color: #2A2A45;
+        }
+
+        .badge.error {
+            background: #D73A49;
+            color: #fff;
+        }
+
+        .card {
+            background: #fff;
+            margin: 14px 0;
+            padding: 16px 20px;
+            border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, .06);
+        }
+
+        .card h2 {
+            font-family: Georgia, serif;
+            color: #3C3C5F;
+            margin: 0 0 10px 0;
+            font-size: 17px;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+        }
+
+        .grid>div {
+            background: #F3F5FA;
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 13px;
+        }
+
+        .label {
+            display: block;
+            font-size: 11px;
+            color: #8892A0;
+            margin-bottom: 2px;
+        }
+
+        .big {
+            font-family: Consolas, monospace;
+            font-size: 28px;
+            color: #3C3C5F;
+            margin: 0.3em 0;
+        }
+
+        button {
+            background: #627EEA;
+            color: #fff;
+            border: 0;
+            padding: 7px 14px;
+            border-radius: 5px;
+            font-weight: 600;
+            cursor: pointer;
+            margin-right: 6px;
+            margin-top: 6px;
+        }
+
+        button:disabled {
+            opacity: 0.55;
+            cursor: not-allowed;
+        }
+
+        input {
+            font-family: Consolas, monospace;
+            font-size: 13px;
+            padding: 6px 10px;
+            border: 1px solid #CCD1DB;
+            border-radius: 5px;
+        }
+
+        .row {
+            margin: 8px 0;
+        }
+
+        .row .label {
+            margin-right: 6px;
+        }
+
+        .owner-only {
+            border-left: 3px solid #F5B744;
+            padding-left: 10px;
+        }
+
+        .hint {
+            font-size: 11px;
+            color: #8892A0;
+            margin-top: 4px;
+        }
+
+        pre {
+            background: #2A2A45;
+            color: #E2E5EE;
+            padding: 12px 14px;
+            border-radius: 6px;
+            font-size: 12px;
+            min-height: 90px;
+            max-height: 260px;
+            overflow: auto;
+            white-space: pre-wrap;
+        }
+
+        pre .err {
+            color: #FFB4B4;
+        }
+
+        pre .ok {
+            color: #C6F0D6;
+        }
+
+        pre .live {
+            color: #FFD46E;
+        }
+
+        pre .mint {
+            color: #6EE6C5;
+        }
+
+        pre .burn {
+            color: #FF9F9F;
+        }
+    </style>
+</head>
+
+<body>
+    <!-- The status bar. Each <span> has an id so the script can update its text
+       and colour (network, role, account) as the connection state changes. -->
+    <header>
+        <h1>Crowdfunding dApp</h1>
+        <div class="badges">
+            <span id="b-net" class="badge">no network</span>
+            <span id="b-role" class="badge">—</span>
+            <span id="b-acct" class="badge">no wallet</span>
+        </div>
+    </header>
+
+    <!-- Connection card: connect button + a 3-cell grid of account facts. -->
+    <section class="card">
+        <h2>Connection</h2>
+        <button id="btn-connect">Connect MetaMask</button>
+        <button id="btn-mint" class="btn btn-warning" disabled>Get 100 Free FUND and RWD Tokens</button>
+        <div class="grid" style="margin-top: 10px;">
+            <div><span class="label">Account</span> <span id="me">—</span></div>
+            <div><span class="label">SEP balance</span> <span id="bal">—</span></div>
+        </div>
+    </section>
+
+    <!--geändert
+    Campaign list:
+    -->
+    <section class="card">
+        <h2>Campaigns</h2>
+        <button id="btn-load" disabled>Load campaigns</button>
+        <div id="campaign-list" style="margin-top:10px;"></div>
+    </section>
+
+    <!--create Campaign-->
+    <section class="card">
+        <h2>Create Campaign</h2>
+        <div class="row"><span class="label">Name</span><br>
+            <input id="c-name" type="text" placeholder="Campaign name" style="width:100%">
+        </div>
+        <div class="row"><span class="label">Description</span><br>
+            <input id="c-desc" type="text" placeholder="Description" style="width:100%">
+        </div>
+        <div class="row"><span class="label">Threshold (FUND tokens)</span><br>
+            <input id="c-threshold" type="number" placeholder="e.g. 100">
+        </div>
+        <div class="row"><span class="label">Exchange Rate (RWD per FUND)</span><br>
+            <input id="c-rate" type="number" placeholder="e.g. 2">
+        </div>
+        <div class="row"><span class="label">Deadline (datetime-local)</span><br>
+            <input id="c-deadline" type="datetime-local">
+        </div>
+        <div class="row"><span class="label">Reward Tokens to deposit</span><br>
+            <input id="c-reward" type="number" placeholder="e.g. 200">
+        </div>
+        <div class="row"><button id="btn-create" disabled>Create Campaign</button></div>
+    </section>
+
+    <!-- Contribute / Withdraw -->
+    <section class="card">
+        <h2>Contribute / Withdraw</h2>
+        <div class="row"><span class="label">Campaign ID</span><br>
+            <input id="cw-id" type="number" placeholder="0">
+        </div>
+        <div class="row"><span class="label">Amount (FUND tokens)</span><br>
+            <input id="cw-amount" type="number" placeholder="e.g. 10">
+        </div>
+        <div class="row">
+            <button id="btn-contribute" disabled>Contribute</button>
+            <button id="btn-withdraw" disabled>Withdraw</button>
+        </div>
+    </section>
+
+    <!-- Finalize / Claim -->
+    <section class="card">
+        <h2>Finalize / Claim</h2>
+        <div class="row"><span class="label">Campaign ID</span><br>
+            <input id="fc-id" type="number" placeholder="0">
+        </div>
+        <div class="row">
+            <button id="btn-finalize" disabled>Finalize</button>
+            <button id="btn-claim" disabled>Claim</button>
+        </div>
+    </section>
+
+    <!-- The live activity log (acts as an on-page console). -->
+    <section class="card">
+        <h2>Activity</h2>
+        <pre id="out">Press "Connect MetaMask" to start.</pre>
+    </section>
+
+    <script type="module">
+        import { ethers } from
+            "https://cdnjs.cloudflare.com/ajax/libs/ethers/6.7.0/ethers.min.js";
+
+        // ─── Deployed contract adresses ───
+        // geändert
+        const FUNDING_TOKEN = "0xB0591eCcaD49752535415b8DF27043D8aaF70097";
+        const REWARD_TOKEN = "0xF86aA1568b77960C279B3E8fF2064b4dC5AFbfCf";
+        const CROWDFUNDING = "0xC08eC7b5f396B5DD8Ae59FfB8c549f10a776bD69";
+        // Separate WebSocket endpoint used ONLY for the live event feed (writes go
+        // through MetaMask's BrowserProvider instead).
+        const SEPOLIA_WSS = "wss://ethereum-sepolia-rpc.publicnode.com";
+
+
+        // we need approve, balanceOf, decimals, symbol (erc20 Abi)
+        // for FundingToken and RewardToken
+        // geändert
+        const erc20Abi = [
+            "function symbol()                       view returns (string)",
+            "function decimals()                     view returns (uint8)",
+            "function balanceOf(address account) view returns (uint256)",
+            "function approve(address spender, uint256 amount) returns (bool)",
+            "function mint(address to, uint256 amount) external"
+
+        ];
+
+        // Crowdfuning Abi, all functions + events we need in the frontend
+        // needs to be the same way as in struct Campaign in solidity
+        // noch nicht fertif!!! fehlt noch function: withdraw, finalize, claim, campaigncount, campaigns, contributions, claimed; 
+        // fehlen events: campaignCreated, Contributed, Withdrawn, Finalized, Claimed 
+        const crowdfundingAbi = [
+            "function createCampaign(string name, string description, address fundingToken, address rewardToken, uint256 exchangeRate, uint256 deadline, uint256 threshold, uint256 rewardTokenAmount) returns (uint256)",
+            "function contribute(uint256 campaignId, uint256 amount)",
+            "function withdraw(uint256 campaignId)",
+            "function finalize(uint256 campaignId)",
+            "function claim(uint256 campaignId)",
+            "function campaignCount() view returns (uint256)",
+            "function campaigns(uint256) view returns (address proposer, string name, string description, address fundingToken, address rewardToken, uint256 exchangeRate, uint256 deadline, uint256 threshold, uint256 totalRaised, uint256 rewardTokensDeposited, bool finalized, bool successful)",
+            "function contributions(uint256, address) view returns (uint256)",
+            "function proposerClaimed(uint256) view returns (bool)",
+            "function backerClaimed(uint256, address) view returns (bool)",
+            "event CampaignCreated(uint256 indexed id, address indexed proposer, uint256 threshold, uint256 deadline)",
+            "event Contributed(uint256 indexed id, address indexed backer, uint256 amount)",
+            "event Withdrawn(uint256 indexed id, address indexed backer, uint256 amount)",
+            "event Finalized(uint256 indexed id, bool successful)",
+            "event Claimed(uint256 indexed id, address indexed who, uint256 amount)"
+        ];
+
+
+        // ─── tiny UI helpers ───
+        // Each helper appends a line to the log and auto-scrolls to the bottom so
+        // the newest entry is always visible.
+        const out = document.getElementById("out");
+        function log(m) { out.textContent += m + "\n"; out.scrollTop = out.scrollHeight; }
+        function ok(m) { out.innerHTML += `<span class="ok">${m}</span>\n`; out.scrollTop = out.scrollHeight; }
+        function err(m) { out.innerHTML += `<span class="err">${m}</span>\n`; out.scrollTop = out.scrollHeight; }
+        function live(m, cls) {
+            const c = cls || "live";
+            out.innerHTML += `<span class="${c}">${m}</span>\n`;
+            out.scrollTop = out.scrollHeight;
+        }
+        function short(a) { return a.slice(0, 6) + "…" + a.slice(-4); }
+
+        // Update one of the header status badges (text + colour class).
+        function setBadge(id, text, cls) {
+            const el = document.getElementById(id);
+            el.textContent = text;
+            el.className = "badge " + (cls || "");
+        }
+
+
+        // ändern -> globale variablen!!
+        // Kommentar verändern!!!
+        // ─── application state ───
+        // provider/signer/token  — the MetaMask side (reads + writes)
+        // wsProvider/wsToken      — the WebSocket side (live event feed)
+        // me/ownerAddr/decimals/symbol — cached values used across handlers
+        let provider, signer, me;
+        let fundingToken, rewardToken, crowdfunding; // contracts bound to signer (writes)
+        let fundingDecimals, fundingSymbol, rewardDecimals, rewardSymbol;
+        let wsProvider, wsCrowdfunding; // live event feed
+
+        // loadCampaign: read all campaigns and render them as cards
+        async function loadCampaigns() {
+            try {
+                const count = await crowdfunding.campaignCount();
+                const list = document.getElementById("campaign-list");
+                // clear previous content
+                list.innerHTML = "";
+                // count is a bigint (Solidity uint256) — must compare with 0n not 0
+                if (count === 0n) {
+                    list.textContent = "No campaigns yet!";
+                    return;
+                }
+
+                // campaignCount is bigint (e.g. 3n). 
+                // loop from 0 to count - 1
+                for (let i = 0; i < count; i++) {
+                    const campaigns = await crowdfunding.campaigns(i);
+
+                    // campaigns like an array -> access fields by name
+                    // declared in ABIs returns(...) list
+                    // Build a small info card for each campaign
+                    const div = document.createElement("div");
+                    div.className = "grid";
+                    div.style.marginBottom = "10px";
+                    div.innerHTML = `
+                        <div> <span class="label">ID </span> ${i}</div>
+                        <div> <span class="label">Name </span> ${campaigns.name}</div>
+                        <div> <span class="label">Threshold </span> ${ethers.formatUnits(campaigns.threshold, fundingDecimals)} ${fundingSymbol}</div>
+                        <div> <span class="label">Raised </span> ${ethers.formatUnits(campaigns.totalRaised, fundingDecimals)} ${fundingSymbol}</div>
+                        <div> <span class="label">Deadline</span> ${new Date(Number(campaigns.deadline) * 1000).toLocaleString()}</div>
+                        <div> <span class="label">Status</span> ${campaigns.finalized ? (campaigns.successful ? "Successful" : "Failed") : "Active"}</div>
+                    `;
+                    list.appendChild(div);
+                }
+            }
+            catch (e) {
+                err("Could not load campaigns: " + (e.shortMessage || e.message))
+            }
+        }
+
+        document.getElementById("btn-load").onclick = loadCampaigns;
+
+        // geändert
+        function fmtFund(value) {
+            return ethers.formatUnits(value, fundingDecimals) + " " + fundingSymbol;
+        }
+
+        function fmtRwd(value) {
+            return ethers.formatUnits(value, rewardDecimals) + " " + rewardSymbol;
+        }
+
+
+        //ändern!!!! neu machen
+        // ─── Connect & bootstrap the whole dApp ───
+
+        document.getElementById("btn-connect").onclick = async () => {
+            if (!window.ethereum) {
+                return err("window.ethereum missing -> install metamask!");
+            }
+            try {
+                // metamask side: provider -> signer -> write capable contracts
+                provider = new ethers.BrowserProvider(window.ethereum);
+                await provider.send("eth_requestAccounts", []);
+                signer = await provider.getSigner();
+                me = await signer.getAddress();
+
+                const net = await provider.getNetwork();
+                const eth = await provider.getBalance(me);
+
+
+
+                // Binf all three contracts to the signer so they can read AND write
+                fundingToken = new ethers.Contract(FUNDING_TOKEN, erc20Abi, signer);
+                rewardToken = new ethers.Contract(REWARD_TOKEN, erc20Abi, signer);
+                crowdfunding = new ethers.Contract(CROWDFUNDING, crowdfundingAbi, signer);
+
+
+                // Read token metadata once and cache it (symbol, decimals never change)
+
+                const code = await provider.getCode(FUNDING_TOKEN);
+                console.log("Vertragscode für FundingToken:", code);
+                if (code === "0x") {
+                    console.error("Attention: Blockchain empty!");
+                }
+
+                [fundingSymbol, fundingDecimals, rewardSymbol, rewardDecimals] = await Promise.all([
+                    fundingToken.symbol(),
+                    fundingToken.decimals(),
+                    rewardToken.symbol(),
+                    rewardToken.decimals()
+                ]);
+
+                // Fill the connection grid / update connection card
+                document.getElementById("me").textContent = short(me);
+                document.getElementById("bal").textContent = ethers.formatEther(eth) + " SEP";
+                // Update header badges
+                setBadge("b-acct", short(me), "ok");
+                // diese line hinzugefügt
+                setBadge("b-role", "backer", "");
+                if (Number(net.chainId) === 11155111) {
+                    setBadge("b-net", "Sepolia", "ok");
+                } else {
+                    setBadge("b-net", "chainId " + net.chainId, "warn");
+                    err("You are NOT on Sepolia. Switch network in MetaMask.");
+                }
+
+
+
+                ok("Connected as" + short(me) + " FUND: " + fundingSymbol + ", RWD: " + rewardSymbol);
+                await loadCampaigns();
+
+                // enable all action buttons after connecting
+                document.getElementById("btn-create").disabled = false;
+                document.getElementById("btn-contribute").disabled = false;
+                document.getElementById("btn-withdraw").disabled = false;
+                document.getElementById("btn-finalize").disabled = false;
+                document.getElementById("btn-claim").disabled = false;
+                document.getElementById("btn-load").disabled = false;
+                document.getElementById("btn-mint").disabled = false;
+                setBadge("b-role", "backer", "");
+
+                startLiveFeed();
+
+                // Rebuild everything if the user switches account/network in MetaMask.
+                window.ethereum.on("accountsChanged", () => location.reload());
+                window.ethereum.on("chainChanged", () => location.reload());
+            } catch (e) {
+                if (e.code === "ACTION_REJECTED" || e.code === 4001) err("You declined the connection.");
+                else err(e.shortMessage || e.message);
+            }
+        };
+
+        // create Campaign
+        document.getElementById("btn-create").onclick = async () => {
+            const name = document.getElementById("c-name").value.trim();
+            const desc = document.getElementById("c-desc").value.trim();
+            const threshold = document.getElementById("c-threshold").value.trim();
+            const rate = document.getElementById("c-rate").value.trim();
+            const deadlineRaw = document.getElementById("c-deadline").value.trim();
+            const reward = document.getElementById("c-reward").value.trim();
+
+            if (!name || !threshold || !rate || !deadlineRaw || !reward) {
+                return err("Please fill in all fields!");
+            }
+            try {
+
+                const dynamicProvider = new ethers.BrowserProvider(window.ethereum);
+                const currentSigner = await dynamicProvider.getSigner();
+
+                const activeCrowdfunding = crowdfunding.connect(currentSigner);
+                const activeRewardToken = rewardToken.connect(currentSigner);
+
+                const deadlineUnixSeconds = Math.floor(Date.parse(deadlineRaw) / 1000);
+                if (isNaN(deadlineUnixSeconds)) {
+                    return err("Wrong Date selected!")
+                }
+                const thresholdWei = ethers.parseUnits(threshold, fundingDecimals);
+                const rewardWei = ethers.parseUnits(reward, rewardDecimals);
+
+                // approve crowdfunding contract to take reward tokens
+                // proposer must allow the contract to pull rewardWei from their balance) 
+                log("Approving reward Tokens.....");
+                const approveTx = await activeRewardToken.approve(CROWDFUNDING, rewardWei);
+                await approveTx.wait();
+                ok("Approved");
+
+                // create the campaign
+                log("Create campaign.....");
+                const tx = await activeCrowdfunding.createCampaign(
+                    name, desc,
+                    FUNDING_TOKEN, REWARD_TOKEN,
+                    BigInt(rate), BigInt(deadlineUnixSeconds),
+                    thresholdWei, rewardWei
+                );
+
+                log("tx hash: " + tx.hash);
+                const rcpt = await tx.wait();
+                ok("Campaign created in block " + rcpt.blockNumber);
+                await loadCampaigns(); // refresh list
+            } catch (e) {
+                handleErr(e);
+            }
+
+        };
+
+        // get 100 FUND
+        document.getElementById("btn-mint").onclick = async () => {
+            try {
+                log("Get 100 Free FUND and RWD Test-Tokens... ");
+                const amountWei = ethers.parseUnits("100", 18);
+
+                log("Minting FUND...");
+                const tx1 = await fundingToken.mint(me, amountWei);
+                await tx1.wait();
+                ok("100 FUND in wallet!");
+
+                log("Minting RWD...");
+                const tx2 = await rewardToken.mint(me, amountWei);
+                await tx2.wait();
+                ok("100 RWD in wallet!");
+
+            } catch (e) {
+                handleErr(e);
+            }
+        };
+
+        // contribute
+
+        document.getElementById("btn-contribute").onclick = async () => {
+            const id = document.getElementById("cw-id").value.trim();
+            const amount = document.getElementById("cw-amount").value.trim();
+            if (!amount) {
+                return err("Enter an amount. ");
+            }
+            try {
+                const amountWei = ethers.parseUnits(amount, fundingDecimals);
+
+                // approve crowdfunding contract to take funding tokens
+                log("Approving funding tokens...");
+                const approveTx = await fundingToken.approve(CROWDFUNDING, amountWei);
+                await approveTx.wait();
+                ok("Approved. ");
+
+                // contribute
+                log("Contributing to campaign " + id + "...");
+                const tx = await crowdfunding.contribute(id, amountWei);
+                log("tx hash: " + tx.hash);
+                const rcpt = await tx.wait();
+                ok("Contributed in block " + rcpt.blockNumber);
+                await loadCampaigns();
+
+            } catch (e) {
+                handleErr(e);
+            }
+        };
+
+        // withdraw
+        document.getElementById("btn-withdraw").onclick = async () => {
+            const id = document.getElementById("cw-id").value.trim();
+            try {
+                log("Withdrawing from campaign " + id + "...");
+                const tx = await crowdfunding.withdraw(id);
+                log("tx hash: " + tx.hash);
+                const rcpt = await tx.wait();
+                ok("Withdrawn in block " + rcpt.blockNumber);
+                await loadCampaigns();
+            } catch (e) {
+                handleErr(e);
+            }
+        };
+
+        // finalize 
+        document.getElementById("btn-finalize").onclick = async () => {
+            const id = document.getElementById("fc-id").value.trim();
+            try {
+                log("Finalizing campaign " + id + "...");
+                const tx = await crowdfunding.finalize(id);
+                log("tx hash: " + tx.hash);
+                const rcpt = await tx.wait();
+                ok("Finalized in block " + rcpt.blockNumber);
+                await loadCampaigns();
+            } catch (e) {
+                handleErr(e);
+            }
+        };
+
+        // claim
+        document.getElementById("btn-claim").onclick = async () => {
+            const id = document.getElementById("fc-id").value.trim();
+
+            try {
+                const dynamicProvider = new ethers.BrowserProvider(window.ethereum);
+                const currentSigner = await dynamicProvider.getSigner();
+                const activeCrowdfunding = crowdfunding.connect(currentSigner);
+
+                log("Claiming from campaign " + id + "...");
+                const tx = await activeCrowdfunding.claim(id);
+                log("tx hash: " + tx.hash);
+                const rcpt = await tx.wait();
+                ok("Claimed in block " + rcpt.blockNumber);
+                // Nach erfolgreichem Claimen den Button für diesen Durchgang sperren
+                document.getElementById("btn-claim").disabled = true;
+                ok("You have claimed already!!! ");
+                await loadCampaigns();
+            } catch (e) {
+                handleErr(e);
+            }
+        };
+
+
+
+
+
+
+
+        // One shared error mapper for all the write handlers above, turning
+        // ethers' stable error codes into friendly, specific messages.
+        function handleErr(e) {
+            switch (e.code) {
+                case "ACTION_REJECTED": err("You declined the transaction."); break;
+                case "INSUFFICIENT_FUNDS": err("Not enough SEP to cover gas."); break;
+                case "CALL_EXCEPTION": err("Contract reverted: " + (e.reason || "unknown")); break;
+                case "NETWORK_ERROR": err("RPC endpoint unreachable. Try again."); break;
+                default: err(e.shortMessage || e.message);
+            }
+        }
+
+        //geändern!!! 
+        // ─── Live event subscription via a SEPARATE WebSocket Provider ───
+        // We do NOT reuse the MetaMask BrowserProvider for events: injected
+        // providers do not deliver event subscriptions reliably. A dedicated
+        // WebSocketProvider keeps a push connection open just for the feed.
+        function startLiveFeed() {
+            try {
+                wsProvider = new ethers.WebSocketProvider(SEPOLIA_WSS);
+                wsCrowdfunding = new ethers.Contract(CROWDFUNDING, crowdfundingAbi, wsProvider);
+
+                wsCrowdfunding.on("CampaignCreated", (id, proposer, threshold, deadline) => {
+                    live(`[NEW CAMPAIGN] id=${id}  proposer=${short(proposer)}  threshold=${ethers.formatUnits(threshold, fundingDecimals)} ${fundingSymbol}`);
+                    loadCampaigns();
+                });
+                wsCrowdfunding.on("Contributed", (id, backer, amount) => {
+                    live(`[CONTRIBUTED] campaign=${id}  backer=${short(backer)}  amount=${ethers.formatUnits(amount, fundingDecimals)} ${fundingSymbol}`);
+                    loadCampaigns();
+                });
+                wsCrowdfunding.on("Withdrawn", (id, backer, amount) => {
+                    live(`[WITHDRAWN] campaign=${id}  backer=${short(backer)}  amount=${ethers.formatUnits(amount, fundingDecimals)} ${fundingSymbol}`);
+                    loadCampaigns();
+                });
+                wsCrowdfunding.on("Finalized", (id, successful) => {
+                    live(`[FINALIZED] campaign=${id}  result=${successful ? "SUCCESS" : "FAILED"}`);
+                    loadCampaigns();
+                });
+                wsCrowdfunding.on("Claimed", (id, who, amount) => {
+                    live(`[CLAIMED] campaign=${id}  who=${short(who)}  amount=${amount}`);
+                });
+
+                log("Subscribed to live Crowdfunding events.");
+            } catch (e) {
+                err("WebSocket subscription failed: " + (e.shortMessage || e.message));
+            }
+        }
+
+        // Clean up the socket when the page unloads so we never leak a connection.
+        window.addEventListener("beforeunload", async () => {
+            if (wsCrowdfunding) wsCrowdfunding.removeAllListeners();
+            if (wsProvider) await wsProvider.destroy();
+        });
+    </script>
+</body>
+
+</html>
